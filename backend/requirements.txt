@@ -1,0 +1,11 @@
+# backend/requirements.txt
+
+fastapi==0.104.1
+uvicorn[standard]==0.23.2
+selenium==4.15.2
+beautifulsoup4==4.12.2
+requests==2.31.0
+lxml==4.9.3
+prometheus-client==0.17.1
+llama-cpp-python==0.2.57 # <-- UPGRADED VERSION (Example, check latest)
+TTS==0.22.0

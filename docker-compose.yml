@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+
+  frontend:
+    build:
+      context: ./frontend
+      # --- REMOVE THIS ARGS SECTION ---
+      # args:
+      #   VITE_API_URL: http://backend:8000
+      # --- END REMOVAL ---
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      # Pass build arguments like CUDA compute capability if needed
+      # args:
+      #   CUDA_COMPUTE_CAPABILITIES: 75
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./models:/app/models:ro # Mount models read-only
+      - ./backend/static:/app/static
+    # Load environment variables from .env file
+    env_file:
+      - .env
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+    # --- GPU Configuration (if using NVIDIA GPU) ---
+    # Requires nvidia-docker runtime configured on the host:
+    # https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+    #deploy:
+    #  resources:
+    #    reservations:
+    #      devices:
+    #        - driver: nvidia
+    #          count: 1 # Request 1 GPU
+    #          capabilities: [gpu] # Request general GPU capabilities
+
+  prometheus:
+    image: prom/prometheus:v2.47.2 # Use a specific version
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus' # Data storage path inside container
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle' # Allows reloading config via API
+    depends_on:
+      # Ensure node_exporter is likely started before prometheus tries scraping it
+      - node_exporter
+      # Backend dependency can remain if needed, though Prometheus will just retry if backend isn't ready
+      - backend
+
+
+  grafana:
+    image: grafana/grafana:10.1.5 # Use a specific version
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards # Mount dashboards directory
+      # Optional: Persist Grafana data (DB, plugins)
+      # - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Default admin password
+      - GF_USERS_ALLOW_SIGN_UP=false # Disable user sign up
+      # Optional: Set timezone, org name, etc.
+      # - GF_DATE_FORMATS_DEFAULT_TIMEZONE=UTC
+    depends_on:
+      - prometheus # Grafana needs Prometheus to be available
+
+  node_exporter:
+    image: prom/node-exporter:v1.6.1 # Use a specific version
+    # Removed the 'ports:' key entirely
+    expose: # Correctly indented expose key
+      - "9100" # Expose port 9100 internally within the Docker network (use quotes for consistency)
+    volumes:
+      # Mount host system paths needed by node_exporter (read-only)
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      # Exclude virtual filesystems to avoid errors/noise
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc|run/docker/netns|var/lib/docker/containers|var/lib/docker/overlay2)($$|/)'
+    # Run privileged ONLY if necessary, usually not required with correct mounts
+    # privileged: true
+    restart: unless-stopped # Restart if it crashes
+
+# Optional: Define a volume for Grafana data persistence
+# volumes:
+#   grafana_data: {}

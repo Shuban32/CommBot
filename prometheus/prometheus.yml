@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s # How frequently to scrape targets
+
+scrape_configs:
+  - job_name: 'backend'
+    # Scrape the backend service defined in docker-compose
+    # Docker Compose networking allows using the service name as hostname
+    static_configs:
+      - targets: ['backend:8000'] # Target backend container port 8000
+    metrics_path: /metrics # Endpoint where backend exposes metrics
+
+  - job_name: 'node_exporter'
+    # Scrape the node_exporter service for host metrics
+    static_configs:
+      - targets: ['node_exporter:9100']
